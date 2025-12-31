@@ -26,3 +26,8 @@ Controls:
 
 Display:
 - Shows current number, last 5 sequence, full grid.
+
+New in v2:
+- Host includes Ticket Monitor for all 40 tickets (progress + preview).
+- Display grid is larger and takes ~40% width.
+- Added Welcome 2026 banner + Akash & Arpita™.

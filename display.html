@@ -8,12 +8,19 @@
 </head>
 <body>
   <div class="wrap">
+    
     <div class="card">
-      <h1>Tambola Display</h1>
-      <p class="sub">This is the public screen. Open on TV / projector. It updates only when the host confirms a number.</p>
+      <div class="banner">
+        <div>
+          <p class="bannerTitle">Welcome 2026 🎉</p>
+          <p class="bannerSub">Resolution #1: Don’t cheat in Tambola. Resolution #2: If you do, at least do it confidently 😄</p>
+        </div>
+        <div class="tm">Akash &amp; Arpita™</div>
+      </div>
+      <p class="sub" style="margin-top:10px;">Public screen. It updates only when the host confirms a number.</p>
     </div>
 
-    <div class="row">
+    <div class="displayRow">
       <div class="card">
         <div class="big">
           <div class="bigNum" id="bigNum">—</div>
@@ -25,28 +32,27 @@
           <div class="lastSeq" id="last5">Last 5: —</div>
         </div>
 
-        <div style="margin-top:12px;">
-          <h1 style="margin-top:10px;">Called grid (1–90)</h1>
-          <p class="sub">Green = called • Yellow outline = most recent</p>
-          <div class="grid90" id="grid"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h1>Quick tips</h1>
-        <p class="sub">
-          • Keep this display page open on the TV.<br/>
-          • Host uses <b>host.html</b> to preview + confirm.<br/>
-          • If you refresh, it restores from saved state.
-        </p>
-        <div class="status" id="statusLine">Ready.</div>
-        <div class="panel">
+        <div class="panel" style="margin-top:12px;">
           <button id="fullBtn" class="primary">Fullscreen</button>
           <button id="copyBtn">Copy Called List</button>
         </div>
+        <div class="status" id="statusLine">Ready.</div>
+      </div>
+
+      <div class="card">
+        <div class="gridCardTitleRow">
+          <div>
+            <h1>Called grid (1–90)</h1>
+            <p class="sub">Green = called • Yellow outline = most recent</p>
+          </div>
+          <span class="pill" id="last10Pill">Last 10: —</span>
+        </div>
+        <div class="grid90 bigGrid" id="grid"></div>
       </div>
     </div>
-  </div>
+
+
+</div>
 
 <script type="module">
   import { loadState, subscribe } from "./state.js";
@@ -57,6 +63,7 @@
   const countPill = document.getElementById("countPill");
   const updatedPill = document.getElementById("updatedPill");
   const last5 = document.getElementById("last5");
+  const last10Pill = document.getElementById("last10Pill");
   const statusLine = document.getElementById("statusLine");
   const fullBtn = document.getElementById("fullBtn");
   const copyBtn = document.getElementById("copyBtn");
@@ -99,6 +106,8 @@
     updatedPill.textContent = `Updated: ${fmtTime(state.updatedAt)}`;
     const seq = state.called.slice(-5).join(", ") || "—";
     last5.textContent = `Last 5: ${seq}`;
+    const last10 = state.called.slice(-10).join(", ") || "—";
+    if(last10Pill) last10Pill.textContent = `Last 10: ${last10}`;
     statusLine.textContent = state.last ? `Last confirmed: ${state.last}` : "Waiting for host…";
   }
 
