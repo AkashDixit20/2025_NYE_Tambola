@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tambola Display</title>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Tambola Display</h1>
+      <p class="sub">This is the public screen. Open on TV / projector. It updates only when the host confirms a number.</p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="big">
+          <div class="bigNum" id="bigNum">—</div>
+          <div class="kv">
+            <span class="pill" id="remainingPill">90 remaining</span>
+            <span class="pill" id="countPill">0 called</span>
+            <span class="pill" id="updatedPill">Updated: —</span>
+          </div>
+          <div class="lastSeq" id="last5">Last 5: —</div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <h1 style="margin-top:10px;">Called grid (1–90)</h1>
+          <p class="sub">Green = called • Yellow outline = most recent</p>
+          <div class="grid90" id="grid"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h1>Quick tips</h1>
+        <p class="sub">
+          • Keep this display page open on the TV.<br/>
+          • Host uses <b>host.html</b> to preview + confirm.<br/>
+          • If you refresh, it restores from saved state.
+        </p>
+        <div class="status" id="statusLine">Ready.</div>
+        <div class="panel">
+          <button id="fullBtn" class="primary">Fullscreen</button>
+          <button id="copyBtn">Copy Called List</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { loadState, subscribe } from "./state.js";
+
+  const bigNum = document.getElementById("bigNum");
+  const grid = document.getElementById("grid");
+  const remainingPill = document.getElementById("remainingPill");
+  const countPill = document.getElementById("countPill");
+  const updatedPill = document.getElementById("updatedPill");
+  const last5 = document.getElementById("last5");
+  const statusLine = document.getElementById("statusLine");
+  const fullBtn = document.getElementById("fullBtn");
+  const copyBtn = document.getElementById("copyBtn");
+
+  const cells = new Map();
+  function buildGrid(){
+    grid.innerHTML = "";
+    for(let n=1;n<=90;n++){
+      const d=document.createElement("div");
+      d.className="cell";
+      d.textContent=n;
+      grid.appendChild(d);
+      cells.set(n,d);
+    }
+  }
+  buildGrid();
+
+  function fmtTime(iso){
+    if(!iso) return "—";
+    try{
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    }catch(e){ return "—"; }
+  }
+
+  function render(state){
+    // reset
+    for(const el of cells.values()) el.classList.remove("called","lastCalled");
+
+    // apply called
+    for(const n of state.called){
+      cells.get(n)?.classList.add("called");
+    }
+    // last outline
+    if(state.last) cells.get(state.last)?.classList.add("lastCalled");
+
+    bigNum.textContent = state.last ?? "—";
+    remainingPill.textContent = `${90 - state.called.length} remaining`;
+    countPill.textContent = `${state.called.length} called`;
+    updatedPill.textContent = `Updated: ${fmtTime(state.updatedAt)}`;
+    const seq = state.called.slice(-5).join(", ") || "—";
+    last5.textContent = `Last 5: ${seq}`;
+    statusLine.textContent = state.last ? `Last confirmed: ${state.last}` : "Waiting for host…";
+  }
+
+  async function copyCalledList(state){
+    const text = state.called.join(", ");
+    try{
+      await navigator.clipboard.writeText(text);
+      statusLine.textContent = `Copied called list (${state.called.length} numbers).`;
+    }catch(e){
+      statusLine.textContent = "Copy failed. Try manually selecting from host screen.";
+    }
+  }
+
+  let state = loadState();
+  render(state);
+
+  // subscribe to host updates
+  subscribe((msg)=>{
+    const s = msg?.state;
+    if(s){
+      state = s;
+      render(state);
+    }
+  });
+
+  fullBtn.addEventListener("click", async ()=>{
+    try{
+      if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    }catch(e){}
+  });
+
+  copyBtn.addEventListener("click", ()=>copyCalledList(state));
+</script>
+</body>
+</html>

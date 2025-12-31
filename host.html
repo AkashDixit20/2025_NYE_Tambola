@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tambola Host Panel</title>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Tambola Host Panel</h1>
+      <p class="sub">
+        This is the private host screen. It lets you preview the next number, optionally override it, and only publish it when you click <b>Confirm & Publish</b>.
+        <br/><br/>
+        <b>Important:</b> Option A sync works best when <b>host.html</b> and <b>display.html</b> are opened from the same GitHub Pages site in the same browser/device (e.g., laptop connected to TV). It is not a multi-device realtime system.
+      </p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h1>Preview</h1>
+        <p class="sub">Generate a number → review it → publish when ready.</p>
+
+        <div class="panel">
+          <div class="previewBox">
+            <div class="pill">Preview</div>
+            <div class="previewNum" id="previewNum">—</div>
+            <div class="small" id="previewHint">Click “Generate Preview” to see the next number (not published yet).</div>
+          </div>
+
+          <div>
+            <div class="pill">Manual override (optional)</div>
+            <input class="input" id="overrideInput" placeholder="Type 1–90 and press Set" inputmode="numeric"/>
+            <div class="small">Use this if you want to change the preview before publishing. Already-called numbers are blocked.</div>
+          </div>
+
+          <div class="btn3">
+            <button class="primary" id="genBtn">Generate Preview</button>
+            <button id="setBtn">Set Override</button>
+            <button class="ok" id="publishBtn">Confirm & Publish</button>
+          </div>
+
+          <div class="btn2">
+            <button id="undoBtn">Undo Last</button>
+            <button class="danger" id="resetBtn">Reset Game</button>
+          </div>
+
+          <div class="status" id="statusLine">Ready.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h1>State</h1>
+        <p class="sub">These reflect the published state (what the public display sees).</p>
+        <div class="kv" style="justify-content:flex-start;margin-top:10px;">
+          <span class="pill" id="countPill">0 called</span>
+          <span class="pill" id="remainingPill">90 remaining</span>
+          <span class="pill" id="last5Pill">Last 5: —</span>
+        </div>
+
+        <div style="margin-top:12px;">
+          <h1 style="margin-top:10px;">Called grid (1–90)</h1>
+          <p class="sub">Host view matches public display.</p>
+          <div class="grid90" id="grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { loadState, saveState, resetState, pickRandomRemaining, confirmNumber, undoLast, broadcast, subscribe, isValidNumber } from "./state.js";
+
+  const previewNumEl = document.getElementById("previewNum");
+  const previewHint = document.getElementById("previewHint");
+  const overrideInput = document.getElementById("overrideInput");
+  const statusLine = document.getElementById("statusLine");
+
+  const genBtn = document.getElementById("genBtn");
+  const setBtn = document.getElementById("setBtn");
+  const publishBtn = document.getElementById("publishBtn");
+  const undoBtn = document.getElementById("undoBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const countPill = document.getElementById("countPill");
+  const remainingPill = document.getElementById("remainingPill");
+  const last5Pill = document.getElementById("last5Pill");
+  const grid = document.getElementById("grid");
+
+  const cells = new Map();
+  function buildGrid(){
+    grid.innerHTML = "";
+    for(let n=1;n<=90;n++){
+      const d=document.createElement("div");
+      d.className="cell";
+      d.textContent=n;
+      grid.appendChild(d);
+      cells.set(n,d);
+    }
+  }
+  buildGrid();
+
+  let state = loadState();
+  let preview = null; // not published
+
+  function setStatus(msg){ statusLine.textContent = msg; }
+
+  function renderState(){
+    for(const el of cells.values()) el.classList.remove("called","lastCalled");
+    for(const n of state.called) cells.get(n)?.classList.add("called");
+    if(state.last) cells.get(state.last)?.classList.add("lastCalled");
+
+    countPill.textContent = `${state.called.length} called`;
+    remainingPill.textContent = `${90 - state.called.length} remaining`;
+    last5Pill.textContent = `Last 5: ${state.called.slice(-5).join(", ") || "—"}`;
+  }
+
+  function renderPreview(){
+    previewNumEl.textContent = preview ?? "—";
+    if(preview === null) previewHint.textContent = "Click “Generate Preview” to see the next number (not published yet).";
+    else previewHint.textContent = "Preview ready. Click “Confirm & Publish” to send to the public display.";
+  }
+
+  function refreshFromStorage(){
+    state = loadState();
+    renderState();
+  }
+
+  // initial
+  renderState();
+  renderPreview();
+
+  // live updates from other tabs (display or another host)
+  subscribe((msg)=>{
+    if(msg?.state){
+      state = msg.state;
+      renderState();
+      // if preview became invalid (someone else published it), clear
+      if(preview !== null && state.called.includes(preview)){
+        preview = null;
+        renderPreview();
+        setStatus("Preview cleared (number already published from another tab).");
+      }
+    }
+  });
+
+  genBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const n = pickRandomRemaining(state);
+    if(n === null){
+      setStatus("All numbers are already called. Reset to play again.");
+      return;
+    }
+    preview = n;
+    renderPreview();
+    setStatus(`Preview generated: ${n} (not published).`);
+  });
+
+  setBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const raw = (overrideInput.value || "").trim();
+    const n = Number(raw);
+    if(!Number.isInteger(n) || !isValidNumber(n)){
+      setStatus("Override must be an integer from 1 to 90.");
+      return;
+    }
+    if(state.called.includes(n)){
+      setStatus(`Cannot set ${n} — it’s already called.`);
+      return;
+    }
+    preview = n;
+    renderPreview();
+    setStatus(`Preview set to ${n} (not published).`);
+  });
+
+  publishBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    if(preview === null){
+      setStatus("No preview number yet. Generate preview first.");
+      return;
+    }
+    try{
+      state = confirmNumber(state, preview);
+      saveState(state);
+      broadcast(state, { by:"host" });
+      setStatus(`Published ${preview}.`);
+      preview = null;
+      renderPreview();
+      renderState();
+    }catch(e){
+      setStatus(e.message || "Publish failed.");
+    }
+  });
+
+  undoBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const res = undoLast(state);
+    if(res?.removed === undefined){
+      // undoLast returns state when no called
+      setStatus("Nothing to undo.");
+      return;
+    }
+    state = res.state;
+    broadcast(state, { by:"host", undo:true });
+    setStatus(`Undid ${res.removed}.`);
+    renderState();
+  });
+
+  resetBtn.addEventListener("click", ()=>{
+    if(!confirm("Reset game? This clears ALL called numbers.")) return;
+    state = resetState();
+    broadcast(state, { by:"host", reset:true });
+    preview = null;
+    renderPreview();
+    renderState();
+    setStatus("Game reset.");
+  });
+</script>
+</body>
+</html>
