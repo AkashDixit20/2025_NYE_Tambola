@@ -1,50 +1,166 @@
-
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Tambola Display</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css"/>
 </head>
 <body>
-<div class="wrap">
-
-  <div class="displayRow">
-    <!-- LEFT PANEL -->
+  <div class="wrap">
+    
     <div class="card">
-      <div class="bannerTitle">Welcome 2026 🎉</div>
-      <div class="bannerSub">Akash & Arpita</div>
-      <br/>
-      <h2 id="current">Waiting for host...</h2>
-      <p id="last5">Last 5: -</p>
-      <div class="controls">
-        <button class="primary">Fullscreen</button>
+      <div class="banner">
+        <div>
+          <p class="bannerTitle">Welcome 2026 🎉</p>
+          <p class="bannerSub">Resolution #1: Don’t cheat in Tambola. Resolution #2: If you do, at least do it confidently 😄</p>
+        </div>
+        <div class="tm">Akash &amp; Arpita™</div>
+      </div>
+      <p class="sub" style="margin-top:10px;">Public screen. It updates only when the host confirms a number.</p>
+    </div>
+
+    <div class="displayRow">
+      <div class="card">
+        <div class="big">
+          <div class="bigNum" id="bigNum">—</div>
+          <div class="kv">
+            <span class="pill" id="remainingPill">90 remaining</span>
+            <span class="pill" id="countPill">0 called</span>
+            <span class="pill" id="updatedPill">Updated: —</span>
+          </div>
+          <div class="lastSeq" id="last5">Last 5: —</div>
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+          <button id="fullBtn" class="primary">Fullscreen</button>
+          <button id="copyBtn">Copy Called List</button>
+        </div>
+        <div class="status" id="statusLine">Ready.</div>
+      </div>
+
+      <div class="card">
+        <div class="gridCardTitleRow">
+          <div>
+            <h1>Called grid (1–90)</h1>
+            <p class="sub">Green = called • Yellow outline = most recent</p>
+          </div>
+          <span class="pill" id="last10Pill">Last 10: —</span>
+        </div>
+        <div class="grid90 bigGrid" id="grid"></div>
       </div>
     </div>
 
-    <!-- RIGHT GRID -->
-    <div class="card">
-      <div class="grid90" id="grid"></div>
-    </div>
-  </div>
+
 </div>
 
-<script>
-const grid = document.getElementById("grid");
-const last = document.getElementById("last5");
-let called = [];
+<script type="module">
+  import { loadState, subscribe } from "./state.js";
 
-for(let i=1;i<=90;i++){
-  const d = document.createElement("div");
-  d.className = "cell";
-  d.textContent = i;
-  grid.appendChild(d);
-}
+  const bigNum = document.getElementById("bigNum");
+  const grid = document.getElementById("grid");
+  const remainingPill = document.getElementById("remainingPill");
+  const countPill = document.getElementById("countPill");
+  const updatedPill = document.getElementById("updatedPill");
+  const last5 = document.getElementById("last5");
+  const last10Pill = document.getElementById("last10Pill");
+  const statusLine = document.getElementById("statusLine");
+  const jokeLine = document.getElementById("jokeLine");
+  const fullBtn = document.getElementById("fullBtn");
+  const copyBtn = document.getElementById("copyBtn");
 
-function mark(num){
-  const cells = document.querySelectorAll(".cell");
-  cells[num-1].classList.add("called");
-}
+  const cells = new Map();
+  function buildGrid(){
+    grid.innerHTML = "";
+    for(let n=1;n<=90;n++){
+      const d=document.createElement("div");
+      d.className="cell";
+      d.textContent=n;
+      grid.appendChild(d);
+      cells.set(n,d);
+    }
+  }
+  buildGrid();
 
+  const JOKES = ["2026 goal: win Tambola without bribing the host. Let\u2019s see how long that lasts.", "If you shout \u201cFULL HOUSE\u201d early, you\u2019re buying the next round. House rules.", "Reminder: whispering numbers to your spouse counts as \u201cstrategic consulting.\u201d", "If your ticket is empty, it\u2019s not the universe \u2014 it\u2019s just math.", "Yes, you can manifest a number. No, you can\u2019t manifest a re-roll.", "Tonight\u2019s workout: tapping numbers and jumping up to claim prizes.", "Tambola tip: confidence is 50% of claiming. Accuracy is\u2026 optional.", "If you\u2019re unlucky, just blame Mercury retrograde. Works every time.", "2026 forecast: high chances of drama at \u201cCorners\u201d and \u201cFirst Row.\u201d", "Pro tip: the louder you say a number, the more it feels like it was called.", "If you miss a call, just say \u201clag\u201d \u2014 works for both Wi\u2011Fi and life.", "I\u2019m not competitive\u2026 I just really enjoy winning.", "If your strategy is \u2018stare harder\u2019, respect. Also: good luck.", "Claim responsibly. Side effects may include smugness and snacks.", "New Year, new chances\u2026 same friends yelling at the host \ud83d\ude04"];
+  const START_MS = (()=>{
+    const k = 'tambola_display_start_ms_v1';
+    const existing = sessionStorage.getItem(k);
+    if(existing) return Number(existing);
+    const now = Date.now();
+    sessionStorage.setItem(k, String(now));
+    return now;
+  })();
+  function jokeIndex(state){
+    const byNumbers = Math.floor((state.called?.length || 0) / 5);
+    const byTime = Math.floor((Date.now() - START_MS) / (5 * 60 * 1000));
+    const base = Math.max(byNumbers, byTime);
+    return base % JOKES.length;
+  }
+
+
+  function fmtTime(iso){
+    if(!iso) return "—";
+    try{
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    }catch(e){ return "—"; }
+  }
+
+  function render(state){
+    // reset
+    for(const el of cells.values()) el.classList.remove("called","lastCalled");
+
+    // apply called
+    for(const n of state.called){
+      cells.get(n)?.classList.add("called");
+    }
+    // last outline
+    if(state.last) cells.get(state.last)?.classList.add("lastCalled");
+
+    bigNum.textContent = state.last ?? "—";
+    remainingPill.textContent = `${90 - state.called.length} remaining`;
+    countPill.textContent = `${state.called.length} called`;
+    updatedPill.textContent = `Updated: ${fmtTime(state.updatedAt)}`;
+    const seq = state.called.slice(-5).join(", ") || "—";
+    last5.textContent = `Last 5: ${seq}`;
+    const last10 = state.called.slice(-10).join(", ") || "—";
+    if(last10Pill) last10Pill.textContent = `Last 10: ${last10}`;
+    statusLine.textContent = state.last ? `Last confirmed: ${state.last}` : "Waiting for host…";
+    if(jokeLine){ jokeLine.textContent = JOKES[jokeIndex(state)]; }
+
+  }
+
+  async function copyCalledList(state){
+    const text = state.called.join(", ");
+    try{
+      await navigator.clipboard.writeText(text);
+      statusLine.textContent = `Copied called list (${state.called.length} numbers).`;
+    }catch(e){
+      statusLine.textContent = "Copy failed. Try manually selecting from host screen.";
+    }
+  }
+
+  let state = loadState();
+  render(state);
+
+  // subscribe to host updates
+  subscribe((msg)=>{
+    const s = msg?.state;
+    if(s){
+      state = s;
+      render(state);
+    }
+  });
+
+  fullBtn.addEventListener("click", async ()=>{
+    try{
+      if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    }catch(e){}
+  });
+
+  copyBtn.addEventListener("click", ()=>copyCalledList(state));
 </script>
 </body>
 </html>
