@@ -13,9 +13,10 @@
       <div class="banner">
         <div>
           <p class="bannerTitle">Welcome 2026 🎉</p>
-          <p class="bannerSub">Resolution #1: Don’t cheat in Tambola. Resolution #2: If you do, at least do it confidently 😄</p>
+          <p class="bannerSub">New Year. New luck. Same competitive friends 😄</p>
+          <p class="sub" id="jokeLine" style="margin-top:8px;">—</p>
         </div>
-        <div class="tm">Akash &amp; Arpita™</div>
+        <div class="tm">Akash &amp; Arpita</div>
       </div>
       <p class="sub" style="margin-top:10px;">Public screen. It updates only when the host confirms a number.</p>
     </div>
@@ -65,6 +66,7 @@
   const last5 = document.getElementById("last5");
   const last10Pill = document.getElementById("last10Pill");
   const statusLine = document.getElementById("statusLine");
+  const jokeLine = document.getElementById("jokeLine");
   const fullBtn = document.getElementById("fullBtn");
   const copyBtn = document.getElementById("copyBtn");
 
@@ -80,6 +82,14 @@
     }
   }
   buildGrid();
+
+  const JOKES = ["2026 goal: win Tambola without bribing the host. Let\u2019s see how long that lasts.", "If you shout \u201cFULL HOUSE\u201d early, you\u2019re buying the next round. House rules.", "Reminder: whispering numbers to your spouse counts as \u201cstrategic consulting.\u201d", "If your ticket is empty, it\u2019s not the universe \u2014 it\u2019s just math.", "Yes, you can manifest a number. No, you can\u2019t manifest a re-roll.", "Tonight\u2019s workout: tapping numbers and jumping up to claim prizes.", "Tambola tip: confidence is 50% of claiming. Accuracy is\u2026 optional.", "If you\u2019re unlucky, just blame Mercury retrograde. Works every time.", "2026 forecast: high chances of drama at \u201cCorners\u201d and \u201cFirst Row.\u201d", "Pro tip: the louder you say a number, the more it feels like it was called.", "If you miss a call, just say \u201clag\u201d \u2014 works for both Wi\u2011Fi and life.", "I\u2019m not competitive\u2026 I just really enjoy winning.", "If your strategy is \u2018stare harder\u2019, respect. Also: good luck.", "Claim responsibly. Side effects may include smugness and snacks.", "New Year, new chances\u2026 same friends yelling at the host \ud83d\ude04"];
+  function pickJoke(calledCount){
+    // change joke after every 3 published numbers
+    const idx = Math.floor(calledCount / 3) % JOKES.length;
+    return JOKES[idx];
+  }
+
 
   function fmtTime(iso){
     if(!iso) return "—";
@@ -109,6 +119,8 @@
     const last10 = state.called.slice(-10).join(", ") || "—";
     if(last10Pill) last10Pill.textContent = `Last 10: ${last10}`;
     statusLine.textContent = state.last ? `Last confirmed: ${state.last}` : "Waiting for host…";
+    if(jokeLine){ jokeLine.textContent = pickJoke(state.called.length); }
+
   }
 
   async function copyCalledList(state){
