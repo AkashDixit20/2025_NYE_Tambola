@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tambola Ticket T02</title>
+  <style>
+    :root { --bg:#0b0f1a; --text:#e9eefc; --muted:#94a3b8; --line:rgba(255,255,255,0.12); }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: radial-gradient(1100px 700px at 30% 10%, #152042 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      display: grid;
+      place-items: start center;
+    }
+    .wrap { width: min(520px, 100%); display: grid; gap: 12px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+    h1 { margin: 0 0 6px; font-size: 18px; }
+    .sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .pill {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.06);
+      font-size: 13px;
+      font-weight: 800;
+      color: rgba(233,238,252,0.92);
+      font-variant-numeric: tabular-nums;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .cell {
+      border-radius: 12px;
+      padding: 14px 0;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.05);
+      font-weight: 900;
+      font-size: 18px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      font-variant-numeric: tabular-nums;
+    }
+    .blank {
+      background: rgba(255,255,255,0.02);
+      border-style: dashed;
+      color: rgba(233,238,252,0.22);
+    }
+    .cut {
+      background: rgba(52,211,153,0.18);
+      border-color: rgba(52,211,153,0.45);
+      color: rgba(233,238,252,0.98);
+      position: relative;
+    }
+    .cut::after {
+      content: "✓";
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+    button {
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    button:hover { background: rgba(255,255,255,0.09); }
+    .btnRow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    textarea {
+      width: 100%;
+      min-height: 86px;
+      background: rgba(255,255,255,0.04);
+      color: rgba(233,238,252,0.95);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    .smallRow { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Tambola Ticket T02</h1>
+      <p class="sub">Tap a number to cut/uncut. Your cuts are saved on your phone (even if you refresh). Optional: paste the host’s called list to auto-cut.</p>
+      <div class="smallRow">
+        <span class="pill" id="cutPill">0 cut</span>
+        <span class="pill" id="leftPill">15 left</span>
+      </div>
+
+      <div class="grid" id="grid"></div>
+
+      <div class="btnRow">
+        <button id="clearBtn">Clear Cuts</button>
+        <button id="shareBtn">Share Link</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Auto-cut from Host Calls (optional)</h1>
+      <p class="sub">Paste numbers like: <b>5, 12, 33, 90</b> (spaces/new lines OK) → Apply. This cuts only numbers present on this ticket.</p>
+      <textarea id="calledInput" placeholder="Paste called numbers here..."></textarea>
+      <div class="btnRow">
+        <button id="applyBtn">Apply Called List</button>
+        <button id="resetCalledBtn">Clear Box</button>
+      </div>
+      <p class="sub" id="status" style="margin-top:10px;">Ready.</p>
+    </div>
+  </div>
+
+<script>
+  const TICKET_ID = "T02";
+  const TICKET = [[0, 11, 0, 34, 43, 56, 63, 0, 0], [1, 12, 23, 0, 0, 0, 0, 71, 82], [7, 0, 0, 0, 44, 59, 0, 77, 87]]; // 3 x 9, 0 = blank
+  const STORAGE_KEY = "tambola_cuts_" + TICKET_ID;
+
+  const gridEl = document.getElementById("grid");
+  const cutPill = document.getElementById("cutPill");
+  const leftPill = document.getElementById("leftPill");
+  const statusEl = document.getElementById("status");
+
+  function ticketNumbersSet() {
+    const s = new Set();
+    for (const row of TICKET) for (const v of row) if (v !== 0) s.add(v);
+    return s;
+  }
+  const TICKET_NUMS = ticketNumbersSet();
+
+  function loadCuts() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(arr.map(Number));
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function saveCuts(cuts) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(cuts)));
+  }
+  function parseCalled(text) {
+    return new Set(
+      (text || "")
+        .split(/[^0-9]+/g)
+        .filter(Boolean)
+        .map(Number)
+        .filter(n => n >= 1 && n <= 90)
+    );
+  }
+
+  let cuts = loadCuts();
+
+  function updateCounters() {
+    const cutCount = cuts.size;
+    cutPill.textContent = `${cutCount} cut`;
+    leftPill.textContent = `${15 - cutCount} left`;
+  }
+
+  function render() {
+    gridEl.innerHTML = "";
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 9; c++) {
+        const v = TICKET[r][c];
+        const d = document.createElement("div");
+        d.className = "cell";
+        if (v === 0) {
+          d.classList.add("blank");
+          d.textContent = "•";
+        } else {
+          d.textContent = v;
+          if (cuts.has(v)) d.classList.add("cut");
+          d.addEventListener("click", () => {
+            if (cuts.has(v)) cuts.delete(v);
+            else cuts.add(v);
+            saveCuts(cuts);
+            render();
+            updateCounters();
+          });
+        }
+        gridEl.appendChild(d);
+      }
+    }
+  }
+
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    if (!confirm("Clear all cuts for this ticket?")) return;
+    cuts = new Set();
+    saveCuts(cuts);
+    render();
+    updateCounters();
+    statusEl.textContent = "Cleared cuts.";
+  });
+
+  document.getElementById("applyBtn").addEventListener("click", () => {
+    const calledText = document.getElementById("calledInput").value;
+    const called = parseCalled(calledText);
+    let applied = 0;
+    for (const n of called) {
+      if (TICKET_NUMS.has(n)) {
+        if (!cuts.has(n)) applied += 1;
+        cuts.add(n);
+      }
+    }
+    saveCuts(cuts);
+    render();
+    updateCounters();
+    statusEl.textContent = `Applied ${applied} new cuts from the pasted list.`;
+  });
+
+  document.getElementById("resetCalledBtn").addEventListener("click", () => {
+    document.getElementById("calledInput").value = "";
+    statusEl.textContent = "Cleared the box.";
+  });
+
+  document.getElementById("shareBtn").addEventListener("click", async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Tambola Ticket " + TICKET_ID, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Link copied!");
+      }
+    } catch (e) {
+      try {
+        await navigator.clipboard.writeText(url);
+        alert("Link copied!");
+      } catch (e2) {
+        alert("Copy failed. Manually copy the address bar link.");
+      }
+    }
+  });
+
+  render();
+  updateCounters();
+</script>
+</body>
+</html>
