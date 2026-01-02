@@ -31,3 +31,9 @@ New in v2:
 - Host includes Ticket Monitor for all 40 tickets (progress + preview).
 - Display grid is larger and takes ~40% width.
 - Added Welcome 2026 banner + Akash & Arpita™.
+
+
+V2 additions:
+- AI Host panel (client-side) suggests next numbers using lookahead simulation over the 40-ticket set.
+- New ticket set (tickets_v2.json) generated with diversity constraints to reduce late-game clustering.
+- Player tickets (ticket01.html … ticket40.html) included in this zip.

@@ -17,7 +17,7 @@
       display: grid;
       place-items: start center;
     }
-    .wrap { width: min(520px, 100%); display: grid; gap: 12px; }
+    .wrap { width: min(560px, 100%); display: grid; gap: 12px; }
     .card {
       background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
       border: 1px solid var(--line);
@@ -136,7 +136,7 @@
 
 <script>
   const TICKET_ID = "T09";
-  const TICKET = [[0, 0, 27, 31, 42, 0, 0, 70, 80], [0, 0, 0, 34, 43, 57, 62, 76, 0], [8, 11, 0, 0, 44, 0, 0, 79, 87]]; // 3 x 9, 0 = blank
+  const TICKET = [[0, 0, 22, 30, 40, 56, 0, 0, 86], [0, 13, 26, 0, 45, 0, 0, 73, 88], [1, 0, 0, 32, 47, 0, 66, 74, 0]]; // 3 x 9, 0 = blank
   const STORAGE_KEY = "tambola_cuts_" + TICKET_ID;
 
   const gridEl = document.getElementById("grid");

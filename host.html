@@ -281,6 +281,221 @@
   }
 
 
+
+  // ---------------- AI Host (v2) ----------------
+  let AI_ENABLED = true;
+
+  const aiOnBtn = document.getElementById("aiOnBtn");
+  const aiOffBtn = document.getElementById("aiOffBtn");
+  const aiSuggestBtn = document.getElementById("aiSuggestBtn");
+  const aiStatus = document.getElementById("aiStatus");
+  const aiList = document.getElementById("aiList");
+  const pacingSel = document.getElementById("pacingSel");
+  const avoidSpikeChk = document.getElementById("avoidSpikeChk");
+
+  function setAiStatus(msg){ if(aiStatus) aiStatus.textContent = msg; }
+  function setAiButtons(){
+    if(!aiOnBtn || !aiOffBtn) return;
+    if(AI_ENABLED){
+      aiOnBtn.classList.add("primary");
+      aiOffBtn.classList.remove("primary");
+    }else{
+      aiOffBtn.classList.add("primary");
+      aiOnBtn.classList.remove("primary");
+    }
+  }
+  aiOnBtn?.addEventListener("click", ()=>{ AI_ENABLED = true; setAiButtons(); setAiStatus("AI enabled."); });
+  aiOffBtn?.addEventListener("click", ()=>{ AI_ENABLED = false; setAiButtons(); setAiStatus("AI disabled."); });
+  setAiButtons();
+
+  function ticketNums(ticket){
+    const s = new Set();
+    for(const row of ticket){ for(const v of row){ if(v!==0) s.add(v); } }
+    return s;
+  }
+  const TICKET_SETS = TICKETS_V2.map(ticketNums);
+
+  function evalCandidate(n, calledSet){
+    // compute: how many tickets advanced, row wins triggered, full houses triggered, and "spread" effect
+    let advanced = 0;
+    let fullHouses = 0;
+    let rowWins = 0;
+
+    for(let i=0;i<TICKETS_V2.length;i++){
+      if(!TICKET_SETS[i].has(n)) continue;
+
+      // cuts before / after
+      const ticket = TICKETS_V2[i];
+      let beforeCuts = 0, afterCuts = 0;
+
+      // row completion check
+      for(let r=0;r<3;r++){
+        let rowNums = [];
+        for(let c=0;c<9;c++){ const v=ticket[r][c]; if(v!==0) rowNums.push(v); }
+        const beforeRow = rowNums.every(v => calledSet.has(v));
+        const afterRow = rowNums.every(v => (v===n) ? true : calledSet.has(v)) && rowNums.includes(n);
+        if(!beforeRow && afterRow) rowWins += 1;
+      }
+
+      // count cuts
+      for(const row of ticket){
+        for(const v of row){
+          if(v===0) continue;
+          if(calledSet.has(v)) beforeCuts += 1;
+          if(v===n || calledSet.has(v)) afterCuts += 1;
+        }
+      }
+
+      if(afterCuts > beforeCuts) advanced += 1;
+      if(beforeCuts < 15 and afterCuts == 15) fullHouses += 1;
+    }
+
+    return { n, advanced, rowWins, fullHouses };
+  }
+
+  function scoreCandidate(m, calledCount, mode, avoidSpike){
+    // weights tuned for "party fairness": move many tickets forward, encourage row wins, avoid many full houses at once.
+    const wAdvance = 1.0;
+    const wRow = 1.2;
+
+    // target full house window: apply penalty if we're too early and candidate creates full houses,
+    // and apply small bonus if we're late and candidate creates a full house.
+    const targetMin = (mode === "faster") ? 55 : 65;
+    const targetMax = (mode === "faster") ? 65 : 75;
+
+    let fullPenalty = 0;
+    if(avoidSpike){
+      fullPenalty += 4.0 * Math.max(0, m.fullHouses - 1); // spike penalty
+    }
+    // early penalty
+    if(calledCount < targetMin){
+      fullPenalty += 5.0 * m.fullHouses;
+    }else if(calledCount > targetMax){
+      fullPenalty -= 0.6 * m.fullHouses; // late: allow endings
+    }else{
+      fullPenalty += 1.2 * m.fullHouses; // mid game: keep a bit conservative
+    }
+
+    return (wAdvance*m.advanced) + (wRow*m.rowWins) - fullPenalty;
+  }
+
+  function aiSuggestNext(){
+    const calledSet = new Set(state.called);
+    const remaining = [];
+    for(let n=1;n<=90;n++){ if(!calledSet.has(n)) remaining.push(n); }
+    if(remaining.length === 0) return [];
+
+    // Candidate generation: take a mix of random + high-impact candidates (numbers that appear on many tickets)
+    const freq = new Map();
+    for(const n of remaining){ freq.set(n, 0); }
+    for(const s of TICKET_SETS){
+      for(const n of s){
+        if(freq.has(n)) freq.set(n, freq.get(n)+1);
+      }
+    }
+    const topByFreq = [...freq.entries()].sort((a,b)=>b[1]-a[1]).slice(0, 18).map(x=>x[0]);
+    const rand = [];
+    for(let i=0;i<22;i++){
+      rand.push(remaining[Math.floor(Math.random()*remaining.length)]);
+    }
+    const candidateSet = Array.from(new Set([...topByFreq, ...rand])).slice(0, 30);
+
+    const mode = pacingSel?.value || "balanced";
+    const avoidSpike = !!avoidSpikeChk?.checked;
+
+    const scored = candidateSet.map(n=>{
+      const m = evalCandidate(n, calledSet);
+      const s = scoreCandidate(m, state.called.length, mode, avoidSpike);
+      return { ...m, score: s, freq: freq.get(n) || 0 };
+    }).sort((a,b)=>b.score-a.score);
+
+    return scored.slice(0, 5);
+  }
+
+  function renderAiList(list){
+    if(!aiList) return;
+    aiList.innerHTML = "";
+    if(!list || list.length===0){
+      aiList.innerHTML = '<div class="sub">No remaining numbers.</div>';
+      return;
+    }
+    for(const item of list){
+      const div = document.createElement("div");
+      div.style.border = "1px solid rgba(255,255,255,0.14)";
+      div.style.borderRadius = "14px";
+      div.style.padding = "10px 12px";
+      div.style.background = "rgba(255,255,255,0.04)";
+      div.style.display = "grid";
+      div.style.gap = "6px";
+
+      const top = document.createElement("div");
+      top.style.display = "flex";
+      top.style.alignItems = "baseline";
+      top.style.justifyContent = "space-between";
+      top.style.gap = "10px";
+      top.style.flexWrap = "wrap";
+
+      const left = document.createElement("div");
+      left.innerHTML = `<span class="pill">#${item.n}</span> <span class="sub" style="margin-left:10px;">impact: +${item.advanced} tickets</span>`;
+
+      const right = document.createElement("div");
+      right.innerHTML = `<span class="sub">rows: <b>${item.rowWins}</b> • full houses: <b>${item.fullHouses}</b> • freq: <b>${item.freq}</b></span>`;
+
+      top.appendChild(left);
+      top.appendChild(right);
+
+      const btnRow = document.createElement("div");
+      btnRow.style.display = "flex";
+      btnRow.style.gap = "10px";
+      btnRow.style.flexWrap = "wrap";
+
+      const useBtn = document.createElement("button");
+      useBtn.className = "primary";
+      useBtn.textContent = `Use #${item.n}`;
+      useBtn.onclick = ()=>{
+        // set as preview/override number in existing UI
+        if(overrideInput){
+          overrideInput.value = String(item.n);
+        }
+        if(previewBox){
+          previewBox.textContent = String(item.n);
+        }
+        setStatus(`AI suggested #${item.n}. Press “Confirm & Publish” to send live.`);
+      };
+
+      btnRow.appendChild(useBtn);
+
+      const explain = document.createElement("div");
+      explain.className = "sub";
+      let warn = "";
+      if(item.fullHouses >= 2) warn = " ⚠️ This may create multiple full houses.";
+      explain.textContent = `Score ${item.score.toFixed(1)} • moves ${item.advanced} tickets • triggers ${item.rowWins} row wins • completes ${item.fullHouses} full houses.${warn}`;
+
+      div.appendChild(top);
+      div.appendChild(btnRow);
+      div.appendChild(explain);
+      aiList.appendChild(div);
+    }
+  }
+
+  aiSuggestBtn?.addEventListener("click", ()=>{
+    if(!AI_ENABLED){
+      setAiStatus("AI is OFF. Turn it ON to get suggestions.");
+      return;
+    }
+    setAiStatus("Thinking…");
+    const list = aiSuggestNext();
+    renderAiList(list);
+    if(list.length>0){
+      const best = list[0];
+      setAiStatus(`Suggestion ready. Best: #${best.n} (moves +${best.advanced}, full houses: ${best.fullHouses}).`);
+    }else{
+      setAiStatus("No suggestion.");
+    }
+  });
+
+
+
 // initial
   renderState();
   renderPreview();
