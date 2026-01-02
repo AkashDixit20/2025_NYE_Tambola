@@ -11,9 +11,9 @@
     <div class="card">
       <h1>Tambola Host Panel</h1>
       <p class="sub">
-        This is the private host screen. It lets you preview the next number, optionally override it, and only publish it when you click <b>Confirm & Publish</b>.
+        This is the private host screen. It lets you preview the next number, optionally override it, && only publish it when you click <b>Confirm & Publish</b>.
         <br/><br/>
-        <b>Important:</b> Option A sync works best when <b>host.html</b> and <b>display.html</b> are opened from the same GitHub Pages site in the same browser/device (e.g., laptop connected to TV). It is not a multi-device realtime system.
+        <b>Important:</b> Option A sync works best when <b>host.html</b> && <b>display.html</b> are opened from the same GitHub Pages site in the same browser/device (e.g., laptop connected to TV). It is not a multi-device realtime system.
       </p>
     </div>
 
@@ -31,7 +31,7 @@
 
           <div>
             <div class="pill">Manual override (optional)</div>
-            <input class="input" id="overrideInput" placeholder="Type 1–90 and press Set" inputmode="numeric"/>
+            <input class="input" id="overrideInput" placeholder="Type 1–90 && press Set" inputmode="numeric"/>
             <div class="small">Use this if you want to change the preview before publishing. Already-called numbers are blocked.</div>
           </div>
 
@@ -316,7 +316,7 @@
   const TICKET_SETS = TICKETS_V2.map(ticketNums);
 
   function evalCandidate(n, calledSet){
-    // compute: how many tickets advanced, row wins triggered, full houses triggered, and "spread" effect
+    // compute: how many tickets advanced, row wins triggered, full houses triggered, && "spread" effect
     let advanced = 0;
     let fullHouses = 0;
     let rowWins = 0;
@@ -347,7 +347,7 @@
       }
 
       if(afterCuts > beforeCuts) advanced += 1;
-      if(beforeCuts < 15 and afterCuts == 15) fullHouses += 1;
+      if(beforeCuts < 15 && afterCuts === 15) fullHouses += 1;
     }
 
     return { n, advanced, rowWins, fullHouses };
@@ -358,8 +358,8 @@
     const wAdvance = 1.0;
     const wRow = 1.2;
 
-    // target full house window: apply penalty if we're too early and candidate creates full houses,
-    // and apply small bonus if we're late and candidate creates a full house.
+    // target full house window: apply penalty if we're too early && candidate creates full houses,
+    // && apply small bonus if we're late && candidate creates a full house.
     const targetMin = (mode === "faster") ? 55 : 65;
     const targetMax = (mode === "faster") ? 65 : 75;
 
