@@ -50,6 +50,45 @@
         </div>
       </div>
 
+      <!-- ================= AI HOST (v2) ================= -->
+<div class="card" style="margin-top:14px;">
+  <h1>AI Host (v2)</h1>
+  <p class="sub">
+    Smart suggestion engine that simulates outcomes across all 40 tickets.
+    It helps maintain pacing, avoid long dead zones, and reduce late-game winner spikes.
+  </p>
+
+  <div class="panel" style="display:grid; gap:12px; margin-top:10px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="aiOnBtn" class="primary">AI: ON</button>
+      <button id="aiOffBtn">AI: OFF</button>
+    </div>
+
+    <div>
+      <div class="pill">Pacing mode</div>
+      <select id="pacingSel" class="input">
+        <option value="balanced">Balanced (first full house ~65–75)</option>
+        <option value="faster">Faster (first full house ~55–65)</option>
+      </select>
+    </div>
+
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" id="avoidSpikeChk" checked />
+      <span class="sub">Avoid multiple full houses at once</span>
+    </label>
+
+    <button id="aiSuggestBtn" class="primary">
+      Suggest Next Number
+    </button>
+
+    <div class="status" id="aiStatus">Ready.</div>
+
+    <div id="aiList" style="display:grid; gap:10px;"></div>
+  </div>
+</div>
+<!-- =============== END AI HOST ==================== -->
+
+      
       <div style="display:grid; gap:14px;">
       <div class="card">
         <h1>State</h1>
