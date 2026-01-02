@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tambola Host Panel</title>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Tambola Host Panel</h1>
+      <p class="sub">
+        This is the private host screen. It lets you preview the next number, optionally override it, && only publish it when you click <b>Confirm & Publish</b>.
+        <br/><br/>
+        <b>Important:</b> Option A sync works best when <b>host.html</b> && <b>display.html</b> are opened from the same GitHub Pages site in the same browser/device (e.g., laptop connected to TV). It is not a multi-device realtime system.
+      </p>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h1>Preview</h1>
+        <p class="sub">Generate a number → review it → publish when ready.</p>
+
+        <div class="panel">
+          <div class="previewBox">
+            <div class="pill">Preview</div>
+            <div class="previewNum" id="previewNum">—</div>
+            <div class="small" id="previewHint">Click “Generate Preview” to see the next number (not published yet).</div>
+          </div>
+
+          <div>
+            <div class="pill">Manual override (optional)</div>
+            <input class="input" id="overrideInput" placeholder="Type 1–90 && press Set" inputmode="numeric"/>
+            <div class="small">Use this if you want to change the preview before publishing. Already-called numbers are blocked.</div>
+          </div>
+
+          <div class="btn3">
+            <button class="primary" id="genBtn">Generate Preview</button>
+            <button id="setBtn">Set Override</button>
+            <button class="ok" id="publishBtn">Confirm & Publish</button>
+          </div>
+
+          <div class="btn2">
+            <button id="undoBtn">Undo Last</button>
+            <button class="danger" id="resetBtn">Reset Game</button>
+          </div>
+
+          <div class="status" id="statusLine">Ready.</div>
+        </div>
+      </div>
+
+      <div style="display:grid; gap:14px;">
+      <div class="card">
+        <h1>State</h1>
+        <p class="sub">These reflect the published state (what the public display sees).</p>
+        <div class="kv" style="justify-content:flex-start;margin-top:10px;">
+          <span class="pill" id="countPill">0 called</span>
+          <span class="pill" id="remainingPill">90 remaining</span>
+          <span class="pill" id="last5Pill">Last 5: —</span>
+        </div>
+
+        <div style="margin-top:12px;">
+          <h1 style="margin-top:10px;">Called grid (1–90)</h1>
+          <p class="sub">Host view matches public display.</p>
+          <div class="grid90" id="grid"></div>
+        </div>
+      
+      </div>
+
+      <div class="card">
+        <div class="monitorHeader" style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div>
+            <h1>Ticket Monitor (all 40 tickets)</h1>
+            <p class="sub">Host view: how many numbers are cut on each ticket based on published calls.</p>
+          </div>
+          <div class="pill" id="monitorSummary">0/40 tracked</div>
+        </div>
+
+        <table class="ticketTable" id="ticketTable" style="width:100%;border-collapse:collapse;margin-top:10px;">
+          <thead>
+            <tr>
+              <th style="border-bottom:1px solid rgba(255,255,255,0.10);padding:10px 8px;text-align:left;font-size:13px;">Ticket</th>
+              <th style="border-bottom:1px solid rgba(255,255,255,0.10);padding:10px 8px;text-align:left;font-size:13px;">Cut</th>
+              <th style="border-bottom:1px solid rgba(255,255,255,0.10);padding:10px 8px;text-align:left;font-size:13px;">Left</th>
+              <th style="border-bottom:1px solid rgba(255,255,255,0.10);padding:10px 8px;text-align:left;font-size:13px;width:38%;">Progress</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <div class="ticketPreview" id="ticketPreview" style="display:none;margin-top:12px;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:12px;background:rgba(255,255,255,0.03);">
+          <div class="pill" id="previewTitle">Ticket #—</div>
+          <div class="sub" style="margin-top:6px;">Tap a ticket row above to preview. Green cells = already called.</div>
+          <div class="tgrid" id="previewGrid" style="display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+</div>
+    </div>
+  </div>
+
+<script type="module">
+  import { loadState, saveState, resetState, pickRandomRemaining, confirmNumber, undoLast, broadcast, subscribe, isValidNumber } from "./state.js";
+
+  // ---- HOTFIX: define TICKETS_V2 before AI code runs (loaded from tickets_v2.json) ----
+  let TICKETS_V2 = [];
+  async function loadTicketsV2(){
+    try{
+      const resp = await fetch("./tickets_v2.json", { cache: "no-store" });
+      const data = await resp.json();
+      TICKETS_V2 = data.tickets || data;
+      return true;
+    }catch(e){
+      console.error("Failed to load tickets_v2.json", e);
+      return false;
+    }
+  }
+
+
+  const TICKETS = [[[0, 0, 0, 33, 0, 56, 61, 78, 82], [8, 0, 22, 37, 0, 0, 64, 0, 88], [0, 17, 28, 0, 48, 58, 0, 0, 90]], [[0, 11, 0, 34, 43, 56, 63, 0, 0], [1, 12, 23, 0, 0, 0, 0, 71, 82], [7, 0, 0, 0, 44, 59, 0, 77, 87]], [[0, 0, 24, 36, 0, 0, 64, 72, 82], [0, 10, 0, 0, 41, 59, 0, 77, 83], [7, 12, 0, 0, 0, 0, 65, 78, 84]], [[1, 17, 21, 0, 40, 0, 62, 0, 0], [9, 0, 26, 36, 42, 0, 64, 0, 0], [0, 0, 29, 0, 0, 59, 65, 78, 85]], [[0, 0, 21, 35, 47, 0, 0, 71, 85], [0, 15, 0, 0, 0, 58, 65, 77, 86], [1, 18, 0, 36, 0, 0, 0, 79, 89]], [[4, 18, 0, 0, 47, 0, 64, 74, 0], [0, 0, 20, 37, 0, 59, 66, 0, 88], [6, 0, 21, 0, 49, 0, 69, 77, 0]], [[2, 0, 0, 0, 42, 53, 63, 75, 0], [3, 10, 27, 33, 0, 0, 0, 0, 85], [8, 16, 0, 39, 49, 0, 0, 76, 0]], [[3, 11, 0, 0, 40, 0, 63, 71, 0], [4, 0, 0, 34, 0, 50, 67, 0, 80], [9, 0, 23, 38, 0, 0, 69, 73, 0]], [[0, 0, 27, 31, 42, 0, 0, 70, 80], [0, 0, 0, 34, 43, 57, 62, 76, 0], [8, 11, 0, 0, 44, 0, 0, 79, 87]], [[6, 17, 26, 0, 46, 0, 63, 0, 0], [0, 0, 28, 0, 48, 51, 65, 0, 86], [0, 0, 0, 36, 49, 53, 68, 75, 0]], [[0, 0, 27, 30, 42, 0, 62, 71, 0], [9, 0, 0, 35, 44, 0, 67, 75, 0], [0, 15, 0, 0, 45, 50, 68, 0, 88]], [[2, 0, 0, 33, 48, 0, 0, 70, 82], [6, 0, 0, 0, 0, 53, 64, 72, 85], [7, 17, 29, 0, 0, 0, 0, 75, 87]], [[0, 12, 0, 34, 0, 0, 64, 72, 90], [1, 14, 23, 0, 46, 52, 0, 0, 0], [6, 17, 0, 0, 0, 54, 66, 77, 0]], [[0, 0, 23, 31, 0, 53, 0, 77, 83], [3, 10, 0, 32, 40, 0, 0, 0, 85], [8, 0, 25, 33, 0, 0, 63, 0, 87]], [[0, 14, 0, 32, 45, 0, 62, 0, 84], [0, 0, 28, 35, 49, 0, 63, 0, 89], [1, 0, 0, 36, 0, 51, 0, 71, 90]], [[0, 0, 22, 32, 41, 0, 64, 76, 0], [1, 12, 23, 34, 44, 0, 0, 0, 0], [4, 0, 26, 35, 0, 58, 0, 0, 86]], [[1, 0, 0, 30, 45, 50, 60, 0, 0], [0, 0, 0, 0, 49, 52, 62, 72, 84], [0, 16, 27, 31, 0, 57, 67, 0, 0]], [[2, 11, 0, 0, 40, 0, 60, 70, 0], [0, 13, 25, 0, 43, 0, 62, 72, 0], [0, 0, 0, 33, 45, 59, 0, 77, 84]], [[7, 0, 24, 34, 41, 0, 65, 0, 0], [0, 10, 0, 36, 44, 51, 66, 0, 0], [0, 12, 0, 38, 48, 0, 0, 71, 82]], [[0, 0, 20, 30, 46, 54, 0, 70, 0], [1, 13, 21, 0, 0, 57, 0, 74, 0], [0, 0, 24, 0, 0, 58, 66, 78, 90]], [[0, 0, 25, 0, 0, 53, 63, 73, 86], [0, 19, 27, 0, 43, 0, 66, 74, 0], [3, 0, 29, 34, 0, 0, 69, 79, 0]], [[1, 10, 23, 0, 41, 53, 0, 0, 0], [0, 0, 0, 38, 45, 0, 66, 74, 81], [0, 0, 28, 0, 49, 0, 67, 79, 89]], [[0, 11, 0, 30, 0, 51, 63, 0, 82], [0, 12, 0, 33, 46, 0, 0, 76, 85], [9, 15, 29, 34, 0, 0, 0, 0, 89]], [[2, 18, 0, 31, 43, 0, 0, 72, 0], [0, 19, 22, 36, 0, 53, 0, 74, 0], [0, 0, 0, 38, 47, 0, 64, 79, 82]], [[3, 16, 0, 0, 0, 0, 64, 72, 84], [7, 17, 26, 33, 0, 57, 0, 0, 0], [8, 19, 0, 36, 43, 0, 66, 0, 0]], [[3, 14, 20, 0, 0, 0, 0, 74, 80], [9, 0, 21, 38, 0, 50, 0, 75, 0], [0, 0, 29, 0, 41, 53, 66, 77, 0]], [[0, 11, 0, 0, 46, 50, 61, 70, 0], [6, 13, 22, 0, 0, 54, 0, 72, 0], [0, 0, 0, 34, 0, 55, 64, 78, 80]], [[1, 0, 0, 32, 42, 50, 0, 71, 0], [2, 10, 0, 0, 46, 0, 65, 0, 88], [7, 14, 24, 0, 0, 56, 68, 0, 0]], [[0, 0, 25, 33, 48, 50, 60, 0, 0], [2, 0, 0, 37, 0, 0, 63, 73, 85], [3, 17, 0, 0, 0, 0, 69, 78, 89]], [[0, 10, 21, 30, 49, 0, 0, 0, 85], [8, 0, 27, 34, 0, 0, 65, 0, 87], [0, 0, 28, 37, 0, 59, 0, 73, 89]], [[3, 11, 21, 0, 0, 56, 0, 74, 0], [0, 15, 0, 34, 48, 57, 0, 75, 0], [0, 0, 0, 39, 0, 59, 63, 78, 90]], [[1, 0, 21, 0, 40, 0, 0, 73, 88], [2, 0, 27, 31, 0, 0, 60, 75, 0], [4, 14, 0, 0, 41, 56, 0, 78, 0]], [[7, 10, 0, 0, 0, 0, 64, 72, 83], [9, 14, 22, 0, 0, 50, 0, 0, 88], [0, 15, 0, 34, 43, 51, 69, 0, 0]], [[0, 0, 0, 0, 43, 51, 62, 71, 85], [7, 11, 0, 30, 0, 54, 63, 0, 0], [0, 15, 29, 31, 0, 59, 69, 0, 0]], [[4, 0, 0, 33, 0, 52, 67, 78, 0], [6, 16, 0, 0, 42, 58, 0, 0, 84], [8, 19, 24, 0, 0, 59, 0, 0, 88]], [[7, 13, 0, 0, 0, 52, 0, 75, 85], [0, 15, 29, 0, 0, 58, 61, 0, 88], [0, 17, 0, 30, 43, 0, 64, 0, 90]], [[4, 13, 0, 30, 0, 0, 62, 0, 81], [0, 14, 20, 32, 0, 0, 64, 71, 0], [5, 17, 0, 37, 47, 53, 0, 0, 0]], [[0, 11, 22, 0, 41, 57, 0, 0, 81], [7, 0, 28, 37, 43, 0, 0, 0, 84], [0, 13, 0, 0, 49, 0, 62, 70, 85]], [[0, 14, 0, 0, 42, 52, 60, 0, 80], [9, 17, 0, 0, 0, 53, 63, 75, 0], [0, 0, 26, 30, 47, 55, 64, 0, 0]], [[0, 19, 21, 30, 41, 59, 0, 0, 0], [5, 0, 28, 33, 46, 0, 0, 73, 0], [0, 0, 29, 0, 48, 0, 64, 78, 80]]];
+
+  const previewNumEl = document.getElementById("previewNum");
+  const previewHint = document.getElementById("previewHint");
+  const overrideInput = document.getElementById("overrideInput");
+  const statusLine = document.getElementById("statusLine");
+
+  const genBtn = document.getElementById("genBtn");
+  const setBtn = document.getElementById("setBtn");
+  const publishBtn = document.getElementById("publishBtn");
+  const undoBtn = document.getElementById("undoBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const countPill = document.getElementById("countPill");
+  const remainingPill = document.getElementById("remainingPill");
+  const last5Pill = document.getElementById("last5Pill");
+  const grid = document.getElementById("grid");
+
+  const monitorSummary = document.getElementById("monitorSummary");
+  const ticketTableBody = document.getElementById("ticketTable")?.querySelector("tbody");
+  const ticketPreview = document.getElementById("ticketPreview");
+  const previewTitle = document.getElementById("previewTitle");
+  const previewGrid = document.getElementById("previewGrid");
+  let selectedTicketIdx = null;
+
+  const cells = new Map();
+  function buildGrid(){
+    grid.innerHTML = "";
+    for(let n=1;n<=90;n++){
+      const d=document.createElement("div");
+      d.className="cell";
+      d.textContent=n;
+      grid.appendChild(d);
+      cells.set(n,d);
+    }
+  }
+  buildGrid();
+
+  let state = loadState();
+  let preview = null; // not published
+
+  function setStatus(msg){ statusLine.textContent = msg; }
+
+  function renderState(){
+    for(const el of cells.values()) el.classList.remove("called","lastCalled");
+    for(const n of state.called) cells.get(n)?.classList.add("called");
+    if(state.last) cells.get(state.last)?.classList.add("lastCalled");
+
+    countPill.textContent = `${state.called.length} called`;
+    remainingPill.textContent = `${90 - state.called.length} remaining`;
+    last5Pill.textContent = `Last 5: ${state.called.slice(-5).join(", ") || "—"}`;
+    updateTicketMonitor();
+  }
+
+  function renderPreview(){
+    previewNumEl.textContent = preview ?? "—";
+    if(preview === null) previewHint.textContent = "Click “Generate Preview” to see the next number (not published yet).";
+    else previewHint.textContent = "Preview ready. Click “Confirm & Publish” to send to the public display.";
+  }
+
+  function refreshFromStorage(){
+    state = loadState();
+    renderState();
+  }
+
+  
+  function countCutsForTicket(ticket, calledSet){
+    let totalNums = 0, cut = 0;
+    for(const row of ticket){
+      for(const v of row){
+        if(v !== 0){
+          totalNums++;
+          if(calledSet.has(v)) cut++;
+        }
+      }
+    }
+    return { totalNums, cut, left: totalNums - cut };
+  }
+  function pct(cut,total){ return total ? Math.round((cut/total)*100) : 0; }
+
+  function showTicketPreview(idx, calledSet, silent=false){
+    selectedTicketIdx = idx;
+    if(!ticketPreview || !previewGrid || !previewTitle) return;
+    const ticket = TICKETS[idx];
+    previewTitle.textContent = `Ticket #${String(idx+1).padStart(2,'0')}`;
+    previewGrid.innerHTML = "";
+    for(const row of ticket){
+      for(const v of row){
+        const d = document.createElement("div");
+        d.style.borderRadius = "10px";
+        d.style.padding = "10px 0";
+        d.style.textAlign = "center";
+        d.style.border = "1px solid rgba(255,255,255,0.10)";
+        d.style.background = "rgba(255,255,255,0.04)";
+        d.style.fontWeight = "900";
+        d.style.fontVariantNumeric = "tabular-nums";
+        if(v === 0){
+          d.textContent = "•";
+          d.style.color = "rgba(233,238,252,0.25)";
+          d.style.borderStyle = "dashed";
+          d.style.background = "rgba(255,255,255,0.02)";
+        }else{
+          d.textContent = v;
+          if(calledSet.has(v)){
+            d.style.background = "rgba(52,211,153,0.18)";
+            d.style.borderColor = "rgba(52,211,153,0.40)";
+          }
+        }
+        previewGrid.appendChild(d);
+      }
+    }
+    ticketPreview.style.display = "block";
+    if(!silent) setStatus(`Previewing Ticket #${idx+1}.`);
+  }
+
+  function updateTicketMonitor(){
+    if(!ticketTableBody || !monitorSummary) return;
+    const calledSet = new Set(state.called);
+    monitorSummary.textContent = `${state.called.length > 0 ? TICKETS.length : 0}/${TICKETS.length} tracked`;
+    ticketTableBody.innerHTML = "";
+
+    for(let i=0;i<TICKETS.length;i++){
+      const s = countCutsForTicket(TICKETS[i], calledSet);
+      const p = pct(s.cut, s.totalNums);
+
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.onmouseenter = ()=> tr.style.background = "rgba(255,255,255,0.04)";
+      tr.onmouseleave = ()=> tr.style.background = "transparent";
+      tr.onclick = ()=> showTicketPreview(i, calledSet);
+
+      const td1 = document.createElement("td");
+      td1.textContent = `#${String(i+1).padStart(2,'0')}`;
+      td1.style.borderBottom = "1px solid rgba(255,255,255,0.10)";
+      td1.style.padding = "10px 8px";
+      td1.style.fontSize = "13px";
+
+      const td2 = document.createElement("td");
+      td2.textContent = `${s.cut}`;
+      td2.style.borderBottom = "1px solid rgba(255,255,255,0.10)";
+      td2.style.padding = "10px 8px";
+      td2.style.fontSize = "13px";
+      td2.style.fontVariantNumeric = "tabular-nums";
+
+      const td3 = document.createElement("td");
+      td3.textContent = `${s.left}`;
+      td3.style.borderBottom = "1px solid rgba(255,255,255,0.10)";
+      td3.style.padding = "10px 8px";
+      td3.style.fontSize = "13px";
+      td3.style.fontVariantNumeric = "tabular-nums";
+
+      const td4 = document.createElement("td");
+      td4.style.borderBottom = "1px solid rgba(255,255,255,0.10)";
+      td4.style.padding = "10px 8px";
+      td4.style.fontSize = "13px";
+
+      const bar = document.createElement("div");
+      bar.style.height = "10px";
+      bar.style.borderRadius = "999px";
+      bar.style.background = "rgba(255,255,255,0.10)";
+      bar.style.overflow = "hidden";
+      const fill = document.createElement("div");
+      fill.style.height = "100%";
+      fill.style.width = `${p}%`;
+      fill.style.background = "rgba(96,165,250,0.75)";
+      bar.appendChild(fill);
+      td4.appendChild(bar);
+
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+      ticketTableBody.appendChild(tr);
+    }
+
+    if(selectedTicketIdx !== null){
+      showTicketPreview(selectedTicketIdx, calledSet, true);
+    }
+  }
+
+
+
+  // ---------------- AI Host (v2) ----------------
+  let AI_ENABLED = true;
+
+  const aiOnBtn = document.getElementById("aiOnBtn");
+  const aiOffBtn = document.getElementById("aiOffBtn");
+  const aiSuggestBtn = document.getElementById("aiSuggestBtn");
+  const aiStatus = document.getElementById("aiStatus");
+  const aiList = document.getElementById("aiList");
+  const pacingSel = document.getElementById("pacingSel");
+  const avoidSpikeChk = document.getElementById("avoidSpikeChk");
+
+  function setAiStatus(msg){ if(aiStatus) aiStatus.textContent = msg; }
+  function setAiButtons(){
+    if(!aiOnBtn || !aiOffBtn) return;
+    if(AI_ENABLED){
+      aiOnBtn.classList.add("primary");
+      aiOffBtn.classList.remove("primary");
+    }else{
+      aiOffBtn.classList.add("primary");
+      aiOnBtn.classList.remove("primary");
+    }
+  }
+  aiOnBtn?.addEventListener("click", ()=>{ AI_ENABLED = true; setAiButtons(); setAiStatus("AI enabled."); });
+  aiOffBtn?.addEventListener("click", ()=>{ AI_ENABLED = false; setAiButtons(); setAiStatus("AI disabled."); });
+  setAiButtons();
+
+  function ticketNums(ticket){
+    const s = new Set();
+    for(const row of ticket){ for(const v of row){ if(v!==0) s.add(v); } }
+    return s;
+  }
+  let TICKET_SETS = []; // built after tickets load
+
+  function evalCandidate(n, calledSet){
+    // compute: how many tickets advanced, row wins triggered, full houses triggered, && "spread" effect
+    let advanced = 0;
+    let fullHouses = 0;
+    let rowWins = 0;
+
+    for(let i=0;i<TICKETS_V2.length;i++){
+      if(!TICKET_SETS[i].has(n)) continue;
+
+      // cuts before / after
+      const ticket = TICKETS_V2[i];
+      let beforeCuts = 0, afterCuts = 0;
+
+      // row completion check
+      for(let r=0;r<3;r++){
+        let rowNums = [];
+        for(let c=0;c<9;c++){ const v=ticket[r][c]; if(v!==0) rowNums.push(v); }
+        const beforeRow = rowNums.every(v => calledSet.has(v));
+        const afterRow = rowNums.every(v => (v===n) ? true : calledSet.has(v)) && rowNums.includes(n);
+        if(!beforeRow && afterRow) rowWins += 1;
+      }
+
+      // count cuts
+      for(const row of ticket){
+        for(const v of row){
+          if(v===0) continue;
+          if(calledSet.has(v)) beforeCuts += 1;
+          if(v===n || calledSet.has(v)) afterCuts += 1;
+        }
+      }
+
+      if(afterCuts > beforeCuts) advanced += 1;
+      if(beforeCuts < 15 && afterCuts === 15) fullHouses += 1;
+    }
+
+    return { n, advanced, rowWins, fullHouses };
+  }
+
+  function scoreCandidate(m, calledCount, mode, avoidSpike){
+    // weights tuned for "party fairness": move many tickets forward, encourage row wins, avoid many full houses at once.
+    const wAdvance = 1.0;
+    const wRow = 1.2;
+
+    // target full house window: apply penalty if we're too early && candidate creates full houses,
+    // && apply small bonus if we're late && candidate creates a full house.
+    const targetMin = (mode === "faster") ? 55 : 65;
+    const targetMax = (mode === "faster") ? 65 : 75;
+
+    let fullPenalty = 0;
+    if(avoidSpike){
+      fullPenalty += 4.0 * Math.max(0, m.fullHouses - 1); // spike penalty
+    }
+    // early penalty
+    if(calledCount < targetMin){
+      fullPenalty += 5.0 * m.fullHouses;
+    }else if(calledCount > targetMax){
+      fullPenalty -= 0.6 * m.fullHouses; // late: allow endings
+    }else{
+      fullPenalty += 1.2 * m.fullHouses; // mid game: keep a bit conservative
+    }
+
+    return (wAdvance*m.advanced) + (wRow*m.rowWins) - fullPenalty;
+  }
+
+  async function aiSuggestNext(){
+    const calledSet = new Set(state.called);
+    if(!TICKETS_V2.length){ await loadTicketsV2(); }
+    if(!TICKET_SETS.length && TICKETS_V2.length){ TICKET_SETS = TICKETS_V2.map(ticketNums); }
+
+    const remaining = [];
+    for(let n=1;n<=90;n++){ if(!calledSet.has(n)) remaining.push(n); }
+    if(remaining.length === 0) return [];
+
+    // Candidate generation: take a mix of random + high-impact candidates (numbers that appear on many tickets)
+    const freq = new Map();
+    for(const n of remaining){ freq.set(n, 0); }
+    for(const s of TICKET_SETS){
+      for(const n of s){
+        if(freq.has(n)) freq.set(n, freq.get(n)+1);
+      }
+    }
+    const topByFreq = [...freq.entries()].sort((a,b)=>b[1]-a[1]).slice(0, 18).map(x=>x[0]);
+    const rand = [];
+    for(let i=0;i<22;i++){
+      rand.push(remaining[Math.floor(Math.random()*remaining.length)]);
+    }
+    const candidateSet = Array.from(new Set([...topByFreq, ...rand])).slice(0, 30);
+
+    const mode = pacingSel?.value || "balanced";
+    const avoidSpike = !!avoidSpikeChk?.checked;
+
+    const scored = candidateSet.map(n=>{
+      const m = evalCandidate(n, calledSet);
+      const s = scoreCandidate(m, state.called.length, mode, avoidSpike);
+      return { ...m, score: s, freq: freq.get(n) || 0 };
+    }).sort((a,b)=>b.score-a.score);
+
+    return scored.slice(0, 5);
+  }
+
+  function renderAiList(list){
+    if(!aiList) return;
+    aiList.innerHTML = "";
+    if(!list || list.length===0){
+      aiList.innerHTML = '<div class="sub">No remaining numbers.</div>';
+      return;
+    }
+    for(const item of list){
+      const div = document.createElement("div");
+      div.style.border = "1px solid rgba(255,255,255,0.14)";
+      div.style.borderRadius = "14px";
+      div.style.padding = "10px 12px";
+      div.style.background = "rgba(255,255,255,0.04)";
+      div.style.display = "grid";
+      div.style.gap = "6px";
+
+      const top = document.createElement("div");
+      top.style.display = "flex";
+      top.style.alignItems = "baseline";
+      top.style.justifyContent = "space-between";
+      top.style.gap = "10px";
+      top.style.flexWrap = "wrap";
+
+      const left = document.createElement("div");
+      left.innerHTML = `<span class="pill">#${item.n}</span> <span class="sub" style="margin-left:10px;">impact: +${item.advanced} tickets</span>`;
+
+      const right = document.createElement("div");
+      right.innerHTML = `<span class="sub">rows: <b>${item.rowWins}</b> • full houses: <b>${item.fullHouses}</b> • freq: <b>${item.freq}</b></span>`;
+
+      top.appendChild(left);
+      top.appendChild(right);
+
+      const btnRow = document.createElement("div");
+      btnRow.style.display = "flex";
+      btnRow.style.gap = "10px";
+      btnRow.style.flexWrap = "wrap";
+
+      const useBtn = document.createElement("button");
+      useBtn.className = "primary";
+      useBtn.textContent = `Use #${item.n}`;
+      useBtn.onclick = ()=>{
+        // set as preview/override number in existing UI
+        if(overrideInput){
+          overrideInput.value = String(item.n);
+        }
+        if(previewBox){
+          previewBox.textContent = String(item.n);
+        }
+        setStatus(`AI suggested #${item.n}. Press “Confirm & Publish” to send live.`);
+      };
+
+      btnRow.appendChild(useBtn);
+
+      const explain = document.createElement("div");
+      explain.className = "sub";
+      let warn = "";
+      if(item.fullHouses >= 2) warn = " ⚠️ This may create multiple full houses.";
+      explain.textContent = `Score ${item.score.toFixed(1)} • moves ${item.advanced} tickets • triggers ${item.rowWins} row wins • completes ${item.fullHouses} full houses.${warn}`;
+
+      div.appendChild(top);
+      div.appendChild(btnRow);
+      div.appendChild(explain);
+      aiList.appendChild(div);
+    }
+  }
+
+  aiSuggestBtn?.addEventListener("click", async ()=>{
+    if(!AI_ENABLED){
+      setAiStatus("AI is OFF. Turn it ON to get suggestions.");
+      return;
+    }
+    setAiStatus("Thinking…");
+    const list = await aiSuggestNext();
+    renderAiList(list);
+    if(list.length>0){
+      const best = list[0];
+      setAiStatus(`Suggestion ready. Best: #${best.n} (moves +${best.advanced}, full houses: ${best.fullHouses}).`);
+    }else{
+      setAiStatus("No suggestion.");
+    }
+  });
+
+
+
+loadTicketsV2().then(()=>{ if(TICKETS_V2.length) TICKET_SETS = TICKETS_V2.map(ticketNums); });
+
+// initial
+  renderState();
+  renderPreview();
+
+  // live updates from other tabs (display or another host)
+  subscribe((msg)=>{
+    if(msg?.state){
+      state = msg.state;
+      renderState();
+      // if preview became invalid (someone else published it), clear
+      if(preview !== null && state.called.includes(preview)){
+        preview = null;
+        renderPreview();
+        setStatus("Preview cleared (number already published from another tab).");
+      }
+    }
+  });
+
+  genBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const n = pickRandomRemaining(state);
+    if(n === null){
+      setStatus("All numbers are already called. Reset to play again.");
+      return;
+    }
+    preview = n;
+    renderPreview();
+    setStatus(`Preview generated: ${n} (not published).`);
+  });
+
+  setBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const raw = (overrideInput.value || "").trim();
+    const n = Number(raw);
+    if(!Number.isInteger(n) || !isValidNumber(n)){
+      setStatus("Override must be an integer from 1 to 90.");
+      return;
+    }
+    if(state.called.includes(n)){
+      setStatus(`Cannot set ${n} — it’s already called.`);
+      return;
+    }
+    preview = n;
+    renderPreview();
+    setStatus(`Preview set to ${n} (not published).`);
+  });
+
+  publishBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    if(preview === null){
+      setStatus("No preview number yet. Generate preview first.");
+      return;
+    }
+    try{
+      state = confirmNumber(state, preview);
+      saveState(state);
+      broadcast(state, { by:"host" });
+      setStatus(`Published ${preview}.`);
+      preview = null;
+      renderPreview();
+      renderState();
+    }catch(e){
+      setStatus(e.message || "Publish failed.");
+    }
+  });
+
+  undoBtn.addEventListener("click", ()=>{
+    refreshFromStorage();
+    const res = undoLast(state);
+    if(res?.removed === undefined){
+      // undoLast returns state when no called
+      setStatus("Nothing to undo.");
+      return;
+    }
+    state = res.state;
+    broadcast(state, { by:"host", undo:true });
+    setStatus(`Undid ${res.removed}.`);
+    renderState();
+  });
+
+  resetBtn.addEventListener("click", ()=>{
+    if(!confirm("Reset game? This clears ALL called numbers.")) return;
+    state = resetState();
+    broadcast(state, { by:"host", reset:true });
+    preview = null;
+    renderPreview();
+    renderState();
+    setStatus("Game reset.");
+  });
+</script>
+</body>
+</html>
